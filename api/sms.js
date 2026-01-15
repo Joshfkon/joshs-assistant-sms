@@ -35,6 +35,42 @@ function shouldTrigger(text) {
   return false;
 }
 
+function cannedResponse(text) {
+  const t = text.toLowerCase().trim();
+
+  const map = {
+    "hello there": "General Kenobi.",
+    "this is the way": "This is the way.",
+    "i have spoken": "So it shall be.",
+    "so say we all": "So say we all.",
+    "winter is coming": "And no one prepared.",
+    "may the force be with you": "Always.",
+
+    "interesting": "Very interesting.",
+    "bold move": "Let's see if it pays off.",
+    "big if true": "Huge if accurate.",
+    "trust the process": "Concerning.",
+    "say less": "Already too much.",
+    "make it make sense": "It will not.",
+    "vibe check": "Vibe: questionable.",
+
+    "ugh": "Noted.",
+    "wtf": "Valid reaction.",
+    "therapy": "Josh recommends avoidance.",
+    "steroids": "Allegedly.",
+    "josh": "Josh has no comment.",
+    "lol": "Acknowledged.",
+
+    "are we doing this": "We are doing this.",
+    "this again": "Yes. This again.",
+    "help": "No.",
+    "thoughts": "Regrettably.",
+    "who approved this": "No one.",
+  };
+
+  return map[t] || null;
+}
+
 async function readRawBody(req) {
   return await new Promise((resolve, reject) => {
     let data = "";
@@ -59,6 +95,16 @@ export default async function handler(req, res) {
     // Kill switch: no reply
     if (incoming.toUpperCase() === "ASSISTANT OFF") {
       res.status(200).send("");
+      return;
+    }
+
+    // Deterministic canned responses (no API call)
+    const canned = cannedResponse(incoming);
+    if (canned) {
+      const twiml = new twilio.twiml.MessagingResponse();
+      twiml.message(canned);
+      res.setHeader("Content-Type", "text/xml");
+      res.status(200).send(twiml.toString());
       return;
     }
 
