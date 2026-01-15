@@ -1,0 +1,9 @@
+{
+  "name": "joshs-assistant-sms",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "openai": "^4.0.0",
+    "twilio": "^4.0.0"
+  }
+}
