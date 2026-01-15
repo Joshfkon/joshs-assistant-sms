@@ -54,7 +54,7 @@ Rules:
 `.trim();
 
     const msg = await anthropic.messages.create({
-      model: "claude-3-5-sonnet-latest",
+      model: "claude-3-5-sonnet-20241022",
       max_tokens: 200,
       system,
       messages: [{ role: "user", content: incoming }],
