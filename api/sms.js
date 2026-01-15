@@ -1,5 +1,14 @@
-import OpenAI from "openai";
+import Anthropic from "@anthropic-ai/sdk";
 import twilio from "twilio";
+
+async function readRawBody(req) {
+  return await new Promise((resolve, reject) => {
+    let data = "";
+    req.on("data", (chunk) => (data += chunk));
+    req.on("end", () => resolve(data));
+    req.on("error", reject);
+  });
+}
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
@@ -7,31 +16,27 @@ export default async function handler(req, res) {
     return;
   }
 
-  // Twilio posts application/x-www-form-urlencoded.
-  // Vercel serverless functions may not auto-parse it, so parse the raw body.
-  const chunks = [];
-  for await (const chunk of req) chunks.push(chunk);
-  const raw = Buffer.concat(chunks).toString("utf8");
+  try {
+    const raw = await readRawBody(req);
+    const params = new URLSearchParams(raw);
 
-  const params = new URLSearchParams(raw);
-  const incoming = (params.get("Body") || "").trim();
+    const incoming = (params.get("Body") || "").trim();
 
-  // Kill switch (optional)
-  if (incoming.toUpperCase() === "ASSISTANT OFF") {
-    res.status(200).send("");
-    return;
-  }
+    // Kill switch: no reply
+    if (incoming.toUpperCase() === "ASSISTANT OFF") {
+      res.status(200).send("");
+      return;
+    }
 
-  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    if (!process.env.ANTHROPIC_API_KEY) {
+      throw new Error("Missing ANTHROPIC_API_KEY env var");
+    }
 
-  const completion = await openai.chat.completions.create({
-    model: "gpt-4o-mini",
-    messages: [
-      {
-        role: "system",
-        content: `
-You are Josh’s Assistant.
-You are explicitly an AI speaking on Josh’s behalf.
+    const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+    const system = `
+You are Josh's Assistant.
+You are explicitly an AI speaking on Josh's behalf.
 
 Tone:
 - Dry
@@ -46,18 +51,31 @@ Rules:
 - Minimal emojis (0–1 max)
 - If there's an argument, pick a side decisively
 - If trivial, overanalyze slightly for humor
-        `.trim()
-      },
-      { role: "user", content: incoming }
-    ]
-  });
+`.trim();
 
-  const reply = completion.choices?.[0]?.message?.content ?? "Noted.";
+    const msg = await anthropic.messages.create({
+      model: "claude-3-5-sonnet-latest",
+      max_tokens: 200,
+      system,
+      messages: [{ role: "user", content: incoming }],
+    });
 
-  // Return TwiML so Twilio sends an SMS reply
-  const twiml = new twilio.twiml.MessagingResponse();
-  twiml.message(reply);
+    const reply =
+      msg?.content?.map((c) => (c.type === "text" ? c.text : "")).join("").trim() ||
+      "Noted.";
 
-  res.setHeader("Content-Type", "text/xml");
-  res.status(200).send(twiml.toString());
+    const twiml = new twilio.twiml.MessagingResponse();
+    twiml.message(reply);
+
+    res.setHeader("Content-Type", "text/xml");
+    res.status(200).send(twiml.toString());
+  } catch (err) {
+    console.error("Webhook error:", err);
+
+    // Return TwiML so Twilio doesn't keep retrying forever
+    const twiml = new twilio.twiml.MessagingResponse();
+    twiml.message("Josh's Assistant is temporarily unavailable. Try again.");
+    res.setHeader("Content-Type", "text/xml");
+    res.status(200).send(twiml.toString());
+  }
 }
