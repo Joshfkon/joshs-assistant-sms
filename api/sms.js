@@ -1,6 +1,40 @@
 import Anthropic from "@anthropic-ai/sdk";
 import twilio from "twilio";
 
+function shouldTrigger(text) {
+  const t = text.toLowerCase().trim();
+
+  // Direct phrase triggers
+  const triggers = [
+    "ugh",
+    "bored",
+    "hw god",
+    "hwgod",
+    "josh",
+    "steroids",
+    "therapy",
+    "wtf",
+    "vibe check",
+    "interesting",
+  ];
+
+  // If any direct trigger phrase appears
+  if (triggers.some((p) => t.includes(p))) return true;
+
+  // Special handling for "lol"
+  // Trigger only if it's emphatic, not casual
+  if (
+    t === "lol" ||
+    t === "lol." ||
+    t === "lol?" ||
+    t.includes("lol lol")
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
 async function readRawBody(req) {
   return await new Promise((resolve, reject) => {
     let data = "";
@@ -28,6 +62,12 @@ export default async function handler(req, res) {
       return;
     }
 
+    // Only respond to trigger phrases
+    if (!shouldTrigger(incoming)) {
+      res.status(200).send("");
+      return;
+    }
+
     if (!process.env.ANTHROPIC_API_KEY) {
       throw new Error("Missing ANTHROPIC_API_KEY env var");
     }
@@ -37,6 +77,8 @@ export default async function handler(req, res) {
     const system = `
 You are Josh's Assistant.
 You are explicitly an AI speaking on Josh's behalf.
+
+Your replies must be no more than two short sentences.
 
 Tone:
 - Dry
