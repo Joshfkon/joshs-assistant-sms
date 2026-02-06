@@ -63,7 +63,6 @@ function cannedResponse(text) {
 
     "are we doing this": "We are doing this.",
     "this again": "Yes. This again.",
-    "help": "No.",
     "thoughts": "Regrettably.",
     "who approved this": "No one.",
   };
@@ -91,10 +90,29 @@ export default async function handler(req, res) {
     const params = new URLSearchParams(raw);
 
     const incoming = (params.get("Body") || "").trim();
+    const upper = incoming.toUpperCase();
 
     // Kill switch: no reply
-    if (incoming.toUpperCase() === "ASSISTANT OFF") {
+    if (upper === "ASSISTANT OFF") {
       res.status(200).send("");
+      return;
+    }
+
+    // STOP keyword — Twilio handles opt-out automatically, but acknowledge it
+    if (upper === "STOP") {
+      const twiml = new twilio.twiml.MessagingResponse();
+      twiml.message("You have been unsubscribed and will no longer receive messages. Text START to resubscribe.");
+      res.setHeader("Content-Type", "text/xml");
+      res.status(200).send(twiml.toString());
+      return;
+    }
+
+    // HELP keyword — required for A2P compliance
+    if (upper === "HELP") {
+      const twiml = new twilio.twiml.MessagingResponse();
+      twiml.message("Josh's Assistant SMS: An AI-powered auto-reply service. Reply STOP to opt out. For support, email josh@joshfkon.com");
+      res.setHeader("Content-Type", "text/xml");
+      res.status(200).send(twiml.toString());
       return;
     }
 
